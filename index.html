@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movie Database</title>
+
+    <!-- AngularJS CDN -->
+    <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.8.2/angular.min.js"></script>
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap" rel="stylesheet">
+
+    <!-- Custom Styles -->
+    <style>
+        .favorite {
+            color: red;
+            font-size: 1.5rem;
+        }
+        .loading-spinner {
+            text-align: center;
+            margin-top: 50px;
+        }
+    </style>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+<body ng-app="movieApp" ng-controller="MovieController as ctrl">
+    <div class="container mt-5">
+        <h2 class="text-center">Movie Database</h2>
+
+        <!-- User Authentication -->
+        <div ng-if="!ctrl.userLoggedIn">
+            <h5>User Authentication</h5>
+            <input type="text" ng-model="ctrl.username" placeholder="Username" class="form-control mb-2">
+            <input type="password" ng-model="ctrl.password" placeholder="Password" class="form-control mb-2">
+            <button class="btn btn-success" ng-click="ctrl.login()">Login</button>
+            <button class="btn btn-danger" ng-click="ctrl.logout()">Logout</button>
+            <div ng-if="ctrl.authError" class="alert alert-danger">{{ ctrl.authError }}</div>
+        </div>
+
+        <!-- User Dashboard -->
+        <div ng-if="ctrl.userLoggedIn">
+            <h5>User Dashboard</h5>
+            <h6>Favorites:</h6>
+            <ul>
+                <li ng-repeat="favorite in ctrl.favorites">{{ favorite.Title }}</li>
+            </ul>
+        </div>
+
+        <!-- Search and Clear Buttons -->
+        <div class="input-group mb-3" ng-if="ctrl.userLoggedIn">
+            <input type="text" ng-model="ctrl.searchQuery" class="form-control" placeholder="Search for movies..." aria-label="Search for movies" aria-describedby="button-addon2">
+            <select ng-model="ctrl.selectedGenre" class="form-control">
+                <option value="">All Genres</option>
+                <option ng-repeat="genre in ctrl.genres" value="{{ genre }}">{{ genre }}</option>
+            </select>
+            <div class="input-group-append">
+                <button class="btn btn-primary" type="button" ng-click="ctrl.searchMovies()">Search</button>
+                <button class="btn btn-secondary" type="button" ng-click="ctrl.clearSearch()">Clear</button>
+            </div>
+        </div>
+
+        <!-- Sorting Options -->
+        <div class="mb-3" ng-if="ctrl.userLoggedIn">
+            <label for="sortBy">Sort By:</label>
+            <select ng-model="ctrl.sortBy" ng-change="ctrl.sortMovies()" class="form-control">
+                <option value="title">Alphabetical Order (A to Z)</option>
+                <option value="year">Release Date (Newest to Oldest)</option>
+                <option value="rating">IMDb Rating (Highest to Lowest)</option>
+            </select>
+        </div>
+
+        <!-- Loading Spinner -->
+        <div class="loading-spinner" ng-if="ctrl.loading">
+            <div class="spinner-border text-primary" role="status">
+                <span class="sr-only">Loading...</span>
+            </div>
+        </div>
+
+        <!-- No Movies Found -->
+        <div ng-if="ctrl.errorMessage" class="alert alert-danger text-center">{{ ctrl.errorMessage }}</div>
+
+        <!-- Movie Results -->
+        <div class="row" ng-if="ctrl.movies.length > 0">
+            <div class="col-md-4 mb-4" ng-repeat="movie in ctrl.movies">
+                <div class="card h-100">
+                    <img ng-src="{{ movie.Poster }}" alt="Movie Poster" class="card-img-top">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ movie.Title }}</h5>
+                        <p class="card-text">
+                            <strong>Year:</strong> {{ movie.Year }}<br>
+                            <strong>Type:</strong> {{ movie.Type }}
+                        </p>
+                        <div>
+                            <i class="favorite" ng-click="ctrl.toggleFavorite(movie)" ng-class="{'fa fa-heart': ctrl.isFavorite(movie), 'fa fa-heart-o': !ctrl.isFavorite(movie)}"></i>
+                            <span>Mark as Favorite</span>
+                        </div>
+                        <button class="btn btn-info mt-2" ng-click="ctrl.getMovieDetails(movie.imdbID)">View Details</button>
+                        <button class="btn btn-warning mt-2" ng-click="ctrl.addReview(movie)">Add Review</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pagination -->
+        <nav ng-if="ctrl.totalResults > 10">
+            <ul class="pagination justify-content-center">
+                <li class="page-item" ng-class="{'disabled': ctrl.currentPage === 1}">
+                    <a class="page-link" href="#" ng-click="ctrl.changePage(ctrl.currentPage - 1)">Previous</a>
+                </li>
+                <li class="page-item" ng-repeat="n in [].constructor(ctrl.totalPages) track by $index" ng-class="{'active': $index + 1 === ctrl.currentPage}">
+                    <a class="page-link" href="#" ng-click="ctrl.changePage($index + 1)">{{ $index + 1 }}</a>
+                </li>
+                <li class="page-item" ng-class="{'disabled': ctrl.currentPage === ctrl.totalPages}">
+                    <a class="page-link" href="#" ng-click="ctrl.changePage(ctrl.currentPage + 1)">Next</a>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Movie Details Modal -->
+        <div class="modal fade" id="movieDetailsModal" tabindex="-1" aria-labelledby="movieDetailsModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="movieDetailsModalLabel">{{ ctrl.selectedMovie.Title }}</h5>
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <img ng-src="{{ ctrl.selectedMovie.Poster }}" class="img-fluid" alt="Movie Poster">
+                            </div>
+                            <div class="col-md-8">
+                                <p><strong>Genre:</strong> {{ ctrl.selectedMovie.Genre }}</p>
+                                <p><strong>Released:</strong> {{ ctrl.selectedMovie.Released }}</p>
+                                <p><strong>Director:</strong> <a href="#" ng-click="ctrl.getDirectorDetails(ctrl.selectedMovie.Director)">{{ ctrl.selectedMovie.Director }}</a></p>
+                                <p><strong>Actors:</strong> <a href="#" ng-click="ctrl.getActorDetails(ctrl.selectedMovie.Actors)">{{ ctrl.selectedMovie.Actors }}</a></p>
+                                <p><strong>Plot:</strong> {{ ctrl.selectedMovie.Plot }}</p>
+                                <p><strong>IMDb Rating:</strong> 
+                                    <span ng-repeat="star in ctrl.getRatingStars(ctrl.selectedMovie.imdbRating)">
+                                        <i class="fa fa-star text-warning"></i>
+                                    </span> 
+                                    {{ ctrl.selectedMovie.imdbRating }}
+                                </p>
+                                <p><strong>Trailer:</strong> <a ng-href="{{ ctrl.selectedMovie.Trailer }}" target="_blank">Watch Trailer</a></p>
+                                <h6>Reviews:</h6>
+                                <ul>
+                                    <li ng-repeat="review in ctrl.selectedMovie.reviews">{{ review }}</li>
+                                </ul>
+                                <div>
+                                    <input type="text" ng-model="ctrl.newReview" placeholder="Add your review" class="form-control">
+                                    <button class="btn btn-primary mt-2" ng-click="ctrl.submitReview()">Submit Review</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                        <button type="button" class="btn btn-primary" ng-click="ctrl.shareMovie(ctrl.selectedMovie)">Share</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS, Popper.js, and jQuery -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+
+    <!-- Custom Script -->
+    <script src="app.js"></script>
+</body>
+</html>
